@@ -256,7 +256,7 @@ class GoodWeCommunicator(object):
     """
     if len(data) < 5:
         logging.debug("Response is too short.")
-        raise PartialResponseException("Response is too short.")
+        raise PartialResponseException(len(data), 5)
     if data[MODBUS_COMMAND_INDEX] == MODBUS_READ_CMD:
         if data[MODBUS_PAYLOAD_LENGTH_INDEX] != length * 2:
             logging.debug("Response has unexpected length: %d, expected %d.", data[MODBUS_PAYLOAD_LENGTH_INDEX], length * 2)
@@ -307,7 +307,7 @@ class GoodWeCommunicator(object):
   def read_response(self, command: int, length: int) -> bytes:
     try:
       response = self.device.read_all()
-      if (response == None):
+      if (response == None or len(response) == 0):
         logging.debug("No response from device, going to rediscover.")
         self.inverter.is_online = False
         self.set_state(State.CONNECTED)
