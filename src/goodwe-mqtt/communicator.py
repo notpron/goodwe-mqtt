@@ -197,6 +197,8 @@ R_TODAY_FEED_POWER = 800
 
 class GoodWeCommunicator(object):
   DEFAULT_RESETWAIT = 5          # default wait time in seconds
+  DEFAULT_BACKOFF_MULTIPLIER = 1 # default backoff multiplier
+  MAX_BACKOFF_MULTIPLIER = 20    # maximum backoff multiplier
 
   def __init__(self, serialPort: str):
     self.serial_port = serialPort
@@ -205,6 +207,7 @@ class GoodWeCommunicator(object):
     self.statetime = millis()
     self.inverter = Inverter()
     self.device = None
+    self.backoff_multiplier = self.DEFAULT_BACKOFF_MULTIPLIER
     logging.info("Goodwe initialized")
 
   def reset_tty_device(self):
@@ -245,6 +248,13 @@ class GoodWeCommunicator(object):
     self.state = state
     self.statetime = millis()
   
+  def increase_backoff_multiplier(self):
+    if (self.backoff_multiplier <= self.MAX_BACKOFF_MULTIPLIER):
+        self.backoff_multiplier += 1
+
+  def reset_backoff_multiplier(self):
+    self.backoff_multiplier = self.DEFAULT_BACKOFF_MULTIPLIER
+
   def validate_response(self, data: bytes, command: int, length: int) -> bool:
     """
     Validate the modbus RTU response.
@@ -328,20 +338,30 @@ class GoodWeCommunicator(object):
     self.running_info = RunningInfo()
     self.send_request(MODBUS_READ_CMD, REGISTER_SERIAL_NUMBER, 8)
     time.sleep(3)
-    response = self.read_response(MODBUS_READ_CMD, 8)
-    self.inverter.serial = response.decode("ascii")
-    logging.info("Discovered inverter: %s", self.inverter.serial)
-    self.set_state(State.ONLINE)
+    try:
+      response = self.read_response(MODBUS_READ_CMD, 8)
+      self.inverter.serial = response.decode("ascii")
+      logging.info("Discovered inverter: %s", self.inverter.serial)
+      self.set_state(State.ONLINE)
+      self.reset_backoff_multiplier()
+    except InverterError:
+      self.increase_backoff_multiplier()
 
   def update_inverter_data(self):
     logging.debug("Going ask inverter for information")
     self.send_request(MODBUS_READ_CMD, REGISTER_RUNNING_DATA, 85)
     time.sleep(3)
-    response = self.read_response(MODBUS_READ_CMD, 85)
-    self.inverter.update(response)
+    try:
+      response = self.read_response(MODBUS_READ_CMD, 85)
+      self.inverter.update(response)
+    except RequestFailedException:
+      logging.debug("Failed to read response")
 
   def get_inverter(self):
     return self.inverter
+  
+  def get_backoff_multiplier(self):
+    return self.backoff_multiplier
 
   def handle(self):
     try:

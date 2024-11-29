@@ -62,7 +62,7 @@ class GoodWeProcessor(object):
       try:
         self.goodwe_communicator.handle()
 
-        if (millis() - last_update) > self.poll_interval:
+        if (millis() - last_update) > (self.poll_interval * self.goodwe_communicator.get_backoff_multiplier()):
           inverter = self.goodwe_communicator.get_inverter()
           if inverter.serial:
             logging.debug("Checking inverter complete: %s", inverter.serial)
